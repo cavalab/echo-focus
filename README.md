@@ -37,7 +37,10 @@ python echofocus.py --help
 To train a model, specify a model name, a dataset, and task. 
 
 ```
-python echofocus.py train --model_name [model_name] --dataset [dataset] --task [measure,chd,fyler]
+python echofocus.py train \
+    --model_name [model_name] \
+    --dataset [dataset] \
+    --task [measure,chd,fyler]
 ```
 
 - Trained models and training results are stored in `./trained_models/[model_name]`. If the `model_name` you specify already exists, that one will be loaded from the best checkpoint and training will resume according to the specified arguments.
