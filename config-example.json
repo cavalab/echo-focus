@@ -1,0 +1,78 @@
+{
+  "task": {
+    "measure": {
+      "task_labels": [
+        "AA01",
+        "AR01",
+        "EF05",
+        "LD05",
+        "LE05",
+        "LE07",
+        "LM12",
+        "LS04",
+        "MA02",
+        "MP01",
+        "PA02",
+        "TA01",
+        "LA34",
+        "RA06",
+        "RV19",
+        "ST39",
+        "ST49",
+        "RV32"
+      ],
+      "label_path": "/path/to/echo_chd_measurements.csv"
+    },
+    "chd": {
+      "task_labels": [
+        "ASD",
+        "AnomCA",
+        "BAV",
+        "DORV",
+        "DTGA",
+        "Ebstein",
+        "HLHS",
+        "LSVC",
+        "PAPVR",
+        "PDA",
+        "RAA",
+        "Tri atresia ",
+        "Truncus arteriosus ",
+        "Single_V_Composite",
+        "TOF_ADJ",
+        "AVCD_ADJ",
+        "VSD_ADJ",
+        "Coarct_ADJ",
+        "PULMONARY_ATRESIA_ADJ",
+        "TAPVR_ADJ",
+        "Composite_NonCritical",
+        "Composite_Critical"
+    ],
+      "label_path": "/path/to/echo_fyler_labels.csv"
+    },
+    "fyler":{
+      "task_labels": [
+        "1470s",
+        "1450",
+        "1411",
+        "1530",
+        "3520",
+        "1730",
+        "1813",
+        "1650",
+        "3608",
+        "1610_1639_3436",
+        "is_EF"
+      ],
+      "label_path":"/path/to/echo_fyler_measurements.csv"
+    }
+  },
+	"dataset": {
+		"bch_internal": {
+			"embedding_path" : "/path/to/internal/embeddings/"
+		},
+		"outside": {
+			"embedding_path" : "/path/to/outside/embeddings/"
+		},
+	}
+}

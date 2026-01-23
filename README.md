@@ -34,7 +34,14 @@ python echofocus.py --help
 
 ## Train Models
 
-To train a model, specify a model name, a dataset, and task. 
+
+To train a model, you must first create a configuration file named `config.json`. 
+An example file called `config-example.json` is included as a template for you to use. 
+The `config.json` file specifies:
+- for each task configuration, and the path to the labels file, and the columns in the labels file to use for training.  
+- for each dataset, the the path to the pre-generated PanEcho video embeddings. 
+
+Once `config.json` is made, you can train models by calling `python echofocus.py train` and specifying a model name, a dataset, and task. 
 
 ```
 python echofocus.py train \
@@ -60,11 +67,9 @@ Would generate study embeddings using the EchoFocus_Measure model on the "outsid
 
 ## Explain Model Outputs
 
-Model explanations can be generated using integrated gradients. 
+EchoFocus supports model explanations that attribute importance to individual videos in the echo study using integrated gradients. 
+This is accomplished by calling `python echofocus.py explain` with the appropriate arguments. 
 
-```
-python echofocus.py explain
-```
 
 # Contact
 
