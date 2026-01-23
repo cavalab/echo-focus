@@ -49,9 +49,14 @@ python echofocus.py train \
 
 ## Generate Study Embeddings
 
+To generate study level embeddings, use `python echofocus.py embed`. 
+For example:
+
 ```
-python echofocus.py embed
+python echofocus.py embed --dataset outside --model_name EchoFocus_Measure
 ```
+
+Would generate study embeddings using the EchoFocus_Measure model on the "outside" dataset.
 
 ## Explain Model Outputs
 

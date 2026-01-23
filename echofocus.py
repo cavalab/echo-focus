@@ -118,7 +118,8 @@ class EchoFocus:
 
         assert self.task in data['task'].keys(), f'task must be one of: {data["task"].keys()}; got "{self.task}"' 
 
-        assert self.dataset in data['dataset'].keys(), f'dataset must be one of: {data["dataset"].keys()}; got "{self.dataset}"' 
+        if self.dataset not in data['dataset'].keys():
+            raise ValueError(f'dataset must be one of: {list(data["dataset"].keys())}; got \"{self.dataset}\"')
         for k,v in data['task'][self.task].items():
             setattr(self,k,v)
         for k,v in data['dataset'][self.dataset].items():
@@ -253,7 +254,7 @@ class EchoFocus:
         )
 
         if (Tr == 0):
-            return None, None, test_dataloader
+            return None, None, test_dataloader, input_norm_dict
         else:
             # weights = np.ones(len(Train_DF))
             train_dataset = CustomDataset(Train_DF, study_embeddings, self.task_labels)  # , study_filenames)
@@ -300,7 +301,18 @@ class EchoFocus:
         #     writer = csv.writer(f,delimiter=',')
         #     writer.writerow(headers)
         #     writer.writerow(values)
-            
+
+        # if there is a trained model we are loading, make sure the training
+        # arguments related to CustomTransformer match what was used. 
+        # if they don't, override them and warn the user.
+        train_args_path = os.path.join(self.model_path,'train_args.csv')
+        if os.path.exists(train_args_path):
+            train_args = pd.read_csv(train_args_path).to_dict(orient='records')[0]
+            for k in ['encoder_depth','task_labels','clip_dropout']:
+                if k in train_args and train_args[k] != getattr(self,k):
+                    print(f'WARNING: using {k}={train_args[k]}, loaded from {train_args_path}')
+                    setattr(self,k,train_args[k])
+
         # 6. Pull model if it already exists
         self.model = CustomTransformer(
             input_size=768,
@@ -342,7 +354,7 @@ class EchoFocus:
             current_epoch = 0
             best_epoch = 0
             best_loss = 1e10
-            print('no existing checkpoint')
+            print('no existing lastcheckpoint')
 
         # return model
         return self.model, current_epoch, best_epoch, best_loss, input_norm_dict
@@ -748,7 +760,6 @@ def load_model_and_random_state(path, model, optimizer=None, scheduler=None):
 
     import_dict = torch.load(path, weights_only=False)  # load a checkpoint
 
-    # load_training_progress(import_dict)
     model.load_state_dict(import_dict["model_state_dict"])
     if "optimizer_state_dict" in import_dict.keys() and (optimizer is not None):
         optimizer.load_state_dict(import_dict["optimizer_state_dict"])
