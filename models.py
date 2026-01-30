@@ -149,6 +149,7 @@ class EchoFocusEndToEnd(nn.Module):
         clip_dropout=0,
         tf_combine="avg",
         panecho_trainable=True,
+        debug_mem=False,
     ):
         """Initialize the end-to-end model.
 
@@ -160,8 +161,10 @@ class EchoFocusEndToEnd(nn.Module):
             clip_dropout (float): Dropout probability for clip embeddings.
             tf_combine (str): Pooling method.
             panecho_trainable (bool): Whether PanEcho backbone is trainable.
+            debug_mem (bool): If True, print CUDA memory stats around PanEcho.
         """
         super().__init__()
+        self.debug_mem = debug_mem
         self.panecho = PanEchoBackbone(backbone_only=True, trainable=panecho_trainable)
         self.transformer = CustomTransformer(
             input_size=input_size,
@@ -184,9 +187,22 @@ class EchoFocusEndToEnd(nn.Module):
         if clips.ndim != 6:
             raise ValueError(f"Unexpected clips shape: {tuple(clips.shape)}")
 
+        def _mem(tag):
+            if not self.debug_mem or not torch.cuda.is_available():
+                return
+            torch.cuda.synchronize()
+            alloc = torch.cuda.memory_allocated() / 1024**3
+            reserved = torch.cuda.memory_reserved() / 1024**3
+            max_alloc = torch.cuda.max_memory_allocated() / 1024**3
+            print(f"[mem] {tag}: alloc={alloc:.2f}G reserved={reserved:.2f}G max={max_alloc:.2f}G")
+
         embeddings = []
-        for video_clips in clips:
+        for idx, video_clips in enumerate(clips):
+            if idx == 0:
+                _mem("panecho before")
             video_emb = self.panecho(video_clips)
+            if idx == 0:
+                _mem("panecho after")
             embeddings.append(video_emb)
         return torch.stack(embeddings, dim=0)
 
