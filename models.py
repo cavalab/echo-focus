@@ -35,6 +35,7 @@ class CustomDropout(nn.Module):
             return x
         else:
             return x
+
 class CustomTransformer(nn.Module):
     """Transformer encoder over clip embeddings with pooling."""
 

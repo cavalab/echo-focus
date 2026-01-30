@@ -205,9 +205,15 @@ class EchoFocus:
         Returns:
             tuple: (train_dataloader, valid_dataloader, test_dataloader, input_norm_dict)
         """
-        csv_data = pd.read_csv(self.label_path) # pull labels from local path
+        print('_setup_data...')
+        print('label path:',self.label_path)
+        csv_data = pd.read_csv(self.label_path, nrows=self.sample_limit) # pull labels from local path
+        print('loaded ',self.label_path)
+        print('dropping duplicates...')
         csv_data = csv_data.drop_duplicates() # I don't know why there are duplicates, but there are...
+        print('dropped duplicates')
         if self.end_to_end and not self.use_hdf5_index:
+            print('video_base_path:',self.video_base_path)
             candidate_eids = csv_data["eid"].astype(int).unique()
             Embedding_EchoID_List = [
                 eid
@@ -220,6 +226,7 @@ class EchoFocus:
                 )
             ]
         else:
+            print('embed path:',self.embedding_path)
             Embedding_EchoID_List = [
                 int(k.split("_")[0]) for k in os.listdir(self.embedding_path)
             ]
@@ -419,6 +426,7 @@ class EchoFocus:
         Returns:
             tuple: (model, current_epoch, best_epoch, best_loss, input_norm_dict)
         """
+        print('_setup_model...')
         # 5. Set up folders and save training args
         self.last_checkpoint_path = os.path.join(self.model_path, 'last_checkpoint.pt') 
         self.best_checkpoint_path = os.path.join(self.model_path, 'best_checkpoint.pt') 
@@ -477,6 +485,7 @@ class EchoFocus:
         self.perf_log = []
         input_norm_dict=None
         if (os.path.isfile(self.last_checkpoint_path)):
+            print('loading lastcheckpoint')
             self.model, self.optimizer, self.scheduler, self.perf_log, input_norm_dict = (
                 load_model_and_random_state(
                     self.last_checkpoint_path,
@@ -495,7 +504,6 @@ class EchoFocus:
             current_epoch = 0
             best_epoch = 0
             best_loss = 1e10
-            print('no existing lastcheckpoint')
 
         # return model
         return self.model, current_epoch, best_epoch, best_loss, input_norm_dict
@@ -530,6 +538,7 @@ class EchoFocus:
         
         # 9. Train
         # Training loop
+        print('begin training loop')
         while (current_epoch < self.epoch_lim) and (
             current_epoch - best_epoch < self.epoch_early_stop
         ):
