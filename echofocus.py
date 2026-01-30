@@ -175,8 +175,12 @@ class EchoFocus:
         if self.dataset not in data['dataset'].keys():
             raise ValueError(f'dataset must be one of: {list(data["dataset"].keys())}; got \"{self.dataset}\"')
         for k,v in data['task'][self.task].items():
+            if hasattr(self, k) and getattr(self, k) != v:
+                print(f'WARNING: overriding init arg {k}={getattr(self, k)} with config value {v}')
             setattr(self,k,v)
         for k,v in data['dataset'][self.dataset].items():
+            if hasattr(self, k) and getattr(self, k) != v:
+                print(f'WARNING: overriding init arg {k}={getattr(self, k)} with config value {v}')
             setattr(self,k,v)
 
     def save(self):
