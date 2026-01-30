@@ -21,7 +21,14 @@
         "ST49",
         "RV32"
       ],
-      "label_path": "/path/to/echo_chd_measurements.csv"
+      "label_path": "/path/to/echo_chd_measurements.csv",
+      "end_to_end": true,
+      "panecho_trainable": true,
+      "num_clips": 16,
+      "clip_len": 16,
+      "smoke_train": false,
+      "smoke_num_samples": 8,
+      "smoke_num_steps": 2
     },
     "chd": {
       "task_labels": [
@@ -48,7 +55,14 @@
         "Composite_NonCritical",
         "Composite_Critical"
     ],
-      "label_path": "/path/to/echo_fyler_labels.csv"
+      "label_path": "/path/to/echo_fyler_labels.csv",
+      "end_to_end": true,
+      "panecho_trainable": true,
+      "num_clips": 16,
+      "clip_len": 16,
+      "smoke_train": false,
+      "smoke_num_samples": 8,
+      "smoke_num_steps": 2
     },
     "fyler":{
       "task_labels": [
@@ -64,7 +78,14 @@
         "1610_1639_3436",
         "is_EF"
       ],
-      "label_path":"/path/to/echo_fyler_measurements.csv"
+      "label_path":"/path/to/echo_fyler_measurements.csv",
+      "end_to_end": true,
+      "panecho_trainable": true,
+      "num_clips": 16,
+      "clip_len": 16,
+      "smoke_train": false,
+      "smoke_num_samples": 8,
+      "smoke_num_steps": 2
     }
   },
 	"dataset": {
