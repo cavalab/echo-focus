@@ -94,7 +94,10 @@ class CustomTransformer(nn.Module):
         # out = self.encoder(x, mask = nn.Transformer.generate_square_subsequent_mask(x.shape[1]), is_causal  = True)
         # out = out[:,-1,:]
         
-        out = self.encoder(x)
+        if isinstance(self.encoder, nn.MultiheadAttention):
+            out, _ = self.encoder(x, x, x)
+        else:
+            out = self.encoder(x)
         if (self.tf_combine == 'avg'):
             out = torch.mean(out[0],axis=0) # average the representation?
         elif (self.tf_combine == 'max'):            
@@ -120,7 +123,10 @@ class CustomTransformer(nn.Module):
         # out = self.encoder(x, mask = nn.Transformer.generate_square_subsequent_mask(x.shape[1]), is_causal  = True)
         # out = out[:,-1,:]
         
-        out = self.encoder(x)
+        if isinstance(self.encoder, nn.MultiheadAttention):
+            out, _ = self.encoder(x, x, x)
+        else:
+            out = self.encoder(x)
         
         if (self.tf_combine == 'avg'):
             out = torch.mean(out[0],axis=0) # average the representation?
