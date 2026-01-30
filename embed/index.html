@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>EchoFocus | AI Automated Echocardiography</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="EchoFocus" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="AI Automated Echocardiography" />
+<meta property="og:description" content="AI Automated Echocardiography" />
+<meta property="og:site_name" content="EchoFocus" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="EchoFocus" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","description":"AI Automated Echocardiography","headline":"EchoFocus","publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"/assets/images/logo.png"}},"url":"/embed/"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=75732202fa5d12267f43a1e3951b91dd63f42769">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1><a href="/">EchoFocus</a></h1>
+
+        
+          <img src="/assets/images/logo.png" alt="Logo" />
+        
+
+        <p>AI Automated Echocardiography</p>
+
+        
+        <p class="view"><a href="https://github.com/cavalab/echofocus">View the Project on GitHub <small>cavalab/echofocus</small></a></p>
+        
+
+        
+
+        
+      </header>
+      <section>
+
+      <p>These scripts are designed to extract PanEcho-based video embeddings from a large directory of echo studies.</p>
+
+<ol>
+  <li><code class="language-plaintext highlighter-rouge">python 01_setup_folders.py [path to echo source] --out_dir [where embeddings will be stored]</code>
+    <ul>
+      <li>this creates a folder (<code class="language-plaintext highlighter-rouge">out_dir</code>), with 3 subdirectories, and populates <code class="language-plaintext highlighter-rouge">out_dir/incomplete/</code> with one csv per echo study folder (which contains the folder path).</li>
+    </ul>
+  </li>
+  <li><code class="language-plaintext highlighter-rouge">python 02_make_batches.py --out_dir [where embeddings will be stored] --batch_size [int]</code>
+    <ul>
+      <li>this creates on csv per batch in <code class="language-plaintext highlighter-rouge">out_dir/batches</code></li>
+    </ul>
+  </li>
+  <li>To process a batch, run <code class="language-plaintext highlighter-rouge">python process_batch.py --batch_num [number]</code>
+    <ul>
+      <li>Each job will process a batch, moving files from <code class="language-plaintext highlighter-rouge">/Incomplete/</code> to <code class="language-plaintext highlighter-rouge">/Complete/</code> as it finishes.</li>
+      <li>if <code class="language-plaintext highlighter-rouge">--train_transforms</code> is specified, the samples in the batch will have random pertubations applied to improve training robustness.</li>
+    </ul>
+  </li>
+</ol>
+
+<p>An example script to process a single batch might look like:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">src_dir</span><span class="o">=</span><span class="s2">"/path/to/echo/source/"</span>
+<span class="nv">out_dir</span><span class="o">=</span><span class="s2">"./processed_echos"</span>
+python 01_setup_folders.py <span class="k">${</span><span class="nv">src_dir</span><span class="k">}</span> <span class="nt">--out_dir</span> <span class="k">${</span><span class="nv">out_dir</span><span class="k">}</span>
+python 02_make_batches.py <span class="nt">--out_dir</span> <span class="k">${</span><span class="nv">out_dir</span><span class="k">}</span>
+python process_batch.py <span class="nt">--batch_num</span> 1 <span class="nt">--out_dir</span> <span class="k">${</span><span class="nv">out_dir</span><span class="k">}</span>
+</code></pre></div></div>
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/cavalab">cavalab</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+  </body>
+</html>
