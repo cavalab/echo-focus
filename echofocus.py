@@ -70,6 +70,7 @@ class EchoFocus:
         smoke_train=False,
         smoke_num_samples=8,
         smoke_num_steps=2,
+        debug_mem=False,
     ):
         """Initialize training/evaluation state and load config.
 
@@ -105,6 +106,7 @@ class EchoFocus:
             smoke_train (bool): If True, run a minimal smoke-training pass.
             smoke_num_samples (int): Number of samples for smoke training.
             smoke_num_steps (int): Number of batches per epoch for smoke training.
+            debug_mem (bool): If True, print CUDA memory stats for first batch each epoch.
         """
         self.time = time.time()
         self.datetime = str(datetime.now()).replace(" ", "_")
@@ -471,6 +473,13 @@ class EchoFocus:
                 clip_dropout=self.clip_dropout,
                 tf_combine="avg",
             )
+        total_params = sum(p.numel() for p in self.model.parameters())
+        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        print(
+            "model parameters:",
+            f"total={total_params:,}",
+            f"trainable={trainable_params:,}",
+        )
     
         if (torch.cuda.is_available()):
             self.model = self.model.to('cuda')
@@ -539,6 +548,15 @@ class EchoFocus:
         # 9. Train
         # Training loop
         print('begin training loop')
+        def _mem(tag):
+            if not torch.cuda.is_available():
+                return
+            torch.cuda.synchronize()
+            alloc = torch.cuda.memory_allocated() / 1024**3
+            reserved = torch.cuda.memory_reserved() / 1024**3
+            max_alloc = torch.cuda.max_memory_allocated() / 1024**3
+            print(f"[mem] {tag}: alloc={alloc:.2f}G reserved={reserved:.2f}G max={max_alloc:.2f}G")
+
         while (current_epoch < self.epoch_lim) and (
             current_epoch - best_epoch < self.epoch_early_stop
         ):
@@ -559,11 +577,19 @@ class EchoFocus:
                     Embedding = Embedding.to('cuda')
                     Correct_Out = Correct_Out.to('cuda')
                     
+                if self.debug_mem and batch_count == 0:
+                    _mem("before forward")
                 out = self.model(Embedding)
+                if self.debug_mem and batch_count == 0:
+                    _mem("after forward")
                 
                 train_loss = self.loss_fn(out, Correct_Out)
+                if self.debug_mem and batch_count == 0:
+                    _mem("after loss")
                 # train_loss = Loss_Func(out, Correct_lvef)
                 train_loss.backward()
+                if self.debug_mem and batch_count == 0:
+                    _mem("after backward")
                 train_loss_total += train_loss.item()
                 
                 # Gradient accumulation
