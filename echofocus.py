@@ -588,7 +588,7 @@ class EchoFocus:
                     
                 if self.debug_mem and batch_count == 0:
                     _mem("before forward")
-                with torch.cuda.amp.autocast(enabled=self.amp):
+                with torch.amp.autocast("cuda", enabled=self.amp):
                     out = self.model(Embedding)
                     train_loss = self.loss_fn(out, Correct_Out)
                 if self.debug_mem and batch_count == 0:
@@ -1183,7 +1183,7 @@ def run_model_on_dataloader(model, dataloader, loss_func_pointer, amp=False):
 
 
         with torch.no_grad():
-            with torch.cuda.amp.autocast(enabled=use_amp):
+            with torch.amp.autocast("cuda", enabled=use_amp):
                 model_outputs = model(embedding)
             return_model_outputs.append(model_outputs.to('cpu'))
             return_correct_outputs.append(correct_labels.to('cpu'))
