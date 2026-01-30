@@ -12,11 +12,7 @@ import random
 
 import torch
 from tqdm import tqdm
-import cv2
 import numpy as np
-from torchvision import tv_tensors
-
-from torchvision.transforms import v2
 
 
 from torch.utils.data import Dataset, DataLoader
@@ -24,99 +20,7 @@ import h5py
 
 import fire
 
-# https://discuss.pytorch.org/t/speed-up-dataloader-using-the-new-torchvision-transforms-support-for-tensor-batch-computation-gpu/113166
-Train_Transforms = torch.nn.Sequential(
-    v2.RandomZoomOut(fill=0, side_range=(1.0, 1.2), p=0.5),
-    v2.RandomCrop(size=(224, 224)),
-    v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomRotation(degrees=(-15, 15)),
-    v2.CenterCrop((224, 224)),
-    v2.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),  # imagenet norm RGB
-)
-
-Debug_Transforms_noNorm = torch.nn.Sequential(  # for visualizing
-    v2.RandomZoomOut(fill=0, side_range=(1.0, 1.2), p=0.5),
-    v2.RandomCrop(size=(224, 224)),
-    v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomRotation(degrees=(-15, 15)),
-    v2.CenterCrop((224, 224)),
-    # v2.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]) # imagenet norm RGB
-)
-
-Test_Transforms = torch.nn.Sequential(
-    v2.CenterCrop((224, 224)),
-    v2.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),  # imagenet norm RGB
-)
-
-
-def pull_clips(file_loc, transform_func, num_clips=16):
-    """Sample multiple random clips from a video and stack them.
-
-    Args:
-        file_loc (str): Path to a video file.
-        transform_func (callable): Transform pipeline for clips.
-        num_clips (int): Number of clips to sample.
-
-    Returns:
-        torch.Tensor: Stacked clips with shape (num_clips, 1, 3, 16, 224, 224).
-    """
-    # capture = cv2.VideoCapture(file_loc) # pull the file once, instead of x16...
-
-    a = [pull_clip(file_loc, transform_func) for k in range(num_clips)]
-    # time_taken_for_vid = time.time()-start_time
-    return torch.vstack(a)  # , time_taken_for_vid
-
-
-def pull_clip(file_loc, transform_func):
-    """Sample a random 16-frame clip and apply transforms.
-
-    Args:
-        file_loc (str): Path to a video file.
-        transform_func (callable): Transform pipeline for clips.
-
-    Returns:
-        torch.Tensor: Clip tensor shaped (1, 3, 16, 224, 224).
-    """
-    capture = cv2.VideoCapture(file_loc)
-    clip_len = 16
-    frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-    frame_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    if frame_count < clip_len:
-        start_idx = 0
-    else:
-        start_idx = np.random.randint(0, frame_count - clip_len + 1, size=1)[0]
-
-    capture.set(cv2.CAP_PROP_POS_FRAMES, start_idx - 1)
-
-    v = []
-    for i in range(clip_len):
-        if i < frame_count:
-            ret, frame = capture.read()
-            frame = cv2.resize(frame, (256, 256), interpolation=cv2.INTER_AREA)
-            v.append(frame)
-        else:
-            v.append(frame)  # "last image carried forward"
-
-    v = np.stack(v, axis=0)  # f x h x w x 3
-    v = tv_tensors.Video(np.transpose(v, (0, 3, 1, 2)))  # f x 3 x h x w
-
-    # debug_save_video(v.permute((0,2,3,1)).numpy(),'orig')
-
-    # v = convex_hull_correction(v) # no convex hull correction here
-    # debug_save_video(v.permute((0,2,3,1)).numpy(),'masked')
-
-    v = v.type(torch.float32) / 255  # convert to 0-1 float32 format # added 5/1/25
-    # debug_save_video((Debug_Transforms_noNorm(v)*255).type(torch.uint8).permute((0,2,3,1)).numpy(),'augmented')
-
-    v = transform_func(
-        v
-    )  # can't do on GPU - not enough memory; also, these are cheap transforms
-
-    v_as_input = v.unsqueeze(0).transpose(1, 2)
-
-    return v_as_input
+from video_processing import Train_Transforms, Test_Transforms, pull_clips
 
 
 class MyDataset(Dataset):

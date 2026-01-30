@@ -69,10 +69,16 @@
   },
 	"dataset": {
 		"bch_internal": {
-			"embedding_path" : "/path/to/internal/embeddings/"
+			"embedding_path" : "/path/to/internal/embeddings/",
+      "video_base_path": "/path/to/raw/video/root",
+      "video_subdir_format": "{echo_id}_trim",
+      "use_hdf5_index": false
 		},
 		"outside": {
-			"embedding_path" : "/path/to/outside/embeddings/"
-		},
+			"embedding_path" : "/path/to/outside/embeddings/",
+      "video_base_path": "/path/to/raw/video/root",
+      "video_subdir_format": "{echo_id}_trim",
+      "use_hdf5_index": false
+		}
 	}
 }

@@ -4,6 +4,7 @@ import torch
 import h5py
 import os
 import numpy as np
+from video_processing import pull_clips
 # %% data gathering
 class EmbeddingDataset(torch.utils.data.Dataset):
     """Dataset that pulls clip embeddings from a study."""
@@ -150,6 +151,120 @@ class EmbeddingDataset(torch.utils.data.Dataset):
         """Return dataset size."""
         return len(self.embedding_echo_id_list)
 
+
+class VideoClipDataset(torch.utils.data.Dataset):
+    """Dataset that loads raw video clips for an echo study."""
+
+    def __init__(
+        self,
+        embed_path,
+        embedding_echo_id_list,
+        transforms,
+        base_path="/lab-share/Cardio-Mayourian-e2/Public/Echo_Pulled",
+        cache_clips=False,
+        num_clips=16,
+        clip_len=16,
+        use_hdf5_index=False,
+        video_subdir_format="{echo_id}_trim",
+    ):
+        """Create a dataset for loading raw video clips.
+
+        Args:
+            embed_path (str): Folder containing ``*_trim_embed.hdf5`` files.
+            embedding_echo_id_list (list[int]): Echo IDs to include.
+            transforms (callable): Transform pipeline for clips.
+            base_path (str): Base path used when reconstructing filenames.
+            cache_clips (bool): Cache loaded clips in memory.
+            num_clips (int): Number of clips to sample per video.
+            clip_len (int): Frames per clip.
+            use_hdf5_index (bool): Use embedding HDF5 files to locate video paths.
+            video_subdir_format (str): Format for study folder under base_path.
+        """
+        self.embed_path = embed_path
+        self.embedding_echo_id_list = embedding_echo_id_list
+        self.transforms = transforms
+        self.base_path = base_path
+        self.cache_clips = cache_clips
+        self.num_clips = num_clips
+        self.clip_len = clip_len
+        self.use_hdf5_index = use_hdf5_index
+        self.video_subdir_format = video_subdir_format
+        self.keychain = []
+        self.store_keychain = True
+        self.video_cache = {}
+
+    def _get_subframe(self, f, echo_id):
+        """Get the HDF5 group and base path for an echo ID."""
+        base_path = self.base_path
+        study_key = f"{echo_id}_trim"
+        f2 = f["lab-share"]["Cardio-Mayourian-e2"]["Public"]
+        if len(self.keychain) == 0 or not self.store_keychain:
+            i = 0
+            while study_key not in f2.keys() and i < 10:
+                key = list(f2.keys())[0]
+                f2 = f2[key]  # go one level deeper
+                base_path += "/" + key
+                i += 1
+                if self.store_keychain and key != study_key:
+                    self.keychain.append(key)
+        else:
+            for key in self.keychain:
+                f2 = f2[key]  # go one level deeper
+                base_path += "/" + key
+        videos = f2[study_key]
+        base_path += "/" + study_key
+        return videos, base_path
+
+    def get_filenames_by_echo_id(self, echo_id):
+        """Return filenames for an entry by echo ID."""
+        if self.use_hdf5_index:
+            embedding_path = os.path.join(
+                self.embed_path, str(echo_id) + "_trim_embed.hdf5"
+            )
+            with h5py.File(embedding_path, "r") as f:
+                videos, base_path = self._get_subframe(f, echo_id)
+                study_filenames = []
+                for file in videos:
+                    study_filename = "/".join([base_path, file])
+                    study_filenames.append(study_filename)
+            return np.array(study_filenames), echo_id
+
+        study_dir = os.path.join(
+            self.base_path,
+            self.video_subdir_format.format(echo_id=int(echo_id)),
+        )
+        files = [
+            os.path.join(study_dir, f)
+            for f in os.listdir(study_dir)
+            if os.path.isfile(os.path.join(study_dir, f))
+        ]
+        return np.array(sorted(files)), echo_id
+
+    def __getitem__(self, echo_id):
+        """Get all clip tensors for an echo study."""
+        if self.cache_clips and echo_id in self.video_cache:
+            return self.video_cache[echo_id], echo_id
+
+        study_filenames, _ = self.get_filenames_by_echo_id(echo_id)
+        study_clips = []
+        for file_path in study_filenames:
+            clip_tensor = pull_clips(
+                file_path,
+                self.transforms,
+                num_clips=self.num_clips,
+                clip_len=self.clip_len,
+            )
+            study_clips.append(clip_tensor)
+        study_clips = torch.stack(study_clips, dim=0)
+
+        if self.cache_clips:
+            self.video_cache[echo_id] = study_clips
+        return study_clips, echo_id
+
+    def __len__(self):
+        """Return dataset size."""
+        return len(self.embedding_echo_id_list)
+
 class CustomDataset(torch.utils.data.Dataset):
     """Dataset that pairs embeddings with label targets."""
 
@@ -185,8 +300,12 @@ class CustomDataset(torch.utils.data.Dataset):
         else:
             Embeddings,_ = self.embeddings[EID]  # [index]
 
+        if torch.is_tensor(Embeddings):
+            embeddings_tensor = Embeddings
+        else:
+            embeddings_tensor = torch.as_tensor(Embeddings)
         return (
-            torch.tensor(Embeddings),
+            embeddings_tensor,
             torch.tensor(true_labels.values.astype(np.float32), dtype=torch.float32),
             EID,
         )
@@ -251,6 +370,31 @@ def get_dataset(
         return emb_ds
     else:
         raise ValueError('preloading is deprecated. use cache_embeddings')
+
+
+def get_video_dataset(
+    embed_path,
+    embedding_echo_id_list,
+    transforms,
+    cache_clips=False,
+    num_clips=16,
+    clip_len=16,
+    base_path="/lab-share/Cardio-Mayourian-e2/Public/Echo_Pulled",
+    use_hdf5_index=False,
+    video_subdir_format="{echo_id}_trim",
+):
+    """Create a dataset that loads raw clips on demand."""
+    return VideoClipDataset(
+        embed_path,
+        embedding_echo_id_list,
+        transforms=transforms,
+        cache_clips=cache_clips,
+        num_clips=num_clips,
+        clip_len=clip_len,
+        base_path=base_path,
+        use_hdf5_index=use_hdf5_index,
+        video_subdir_format=video_subdir_format,
+    )
     # print('Starting Embedding Pull')
     # start = time.time()
     # parallel_processes = 8

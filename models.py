@@ -3,6 +3,8 @@
 import torch
 from torch import nn
 
+from panecho import PanEchoBackbone
+
 class CustomDropout(nn.Module):
     """Custom dropout that drops entire clip embeddings."""
 
@@ -63,6 +65,16 @@ class CustomTransformer(nn.Module):
         # final linear
         self.ff = nn.Linear(in_features = encoder_dim, out_features = output_size) 
 
+    def _stack_embeddings(self, x):
+        """Stack embeddings from list/tuple or tensor input."""
+        if torch.is_tensor(x):
+            if x.ndim == 3:
+                return x.reshape(-1, x.shape[-1])
+            if x.ndim == 2:
+                return x
+            raise ValueError(f"Unexpected embedding tensor shape: {tuple(x.shape)}")
+        return torch.vstack([k for k in x])
+
     def embed(self, x):
         """Return pooled encoder representation for a set of clips.
 
@@ -72,8 +84,7 @@ class CustomTransformer(nn.Module):
         Returns:
             torch.Tensor: Pooled representation vector.
         """
-        x = torch.vstack([k for k in x]) # combine the tensors for all the videos
-        x = x.unsqueeze(0)
+        x = self._stack_embeddings(x).unsqueeze(0)
         # y = x.squeeze()
         
         x = self.clip_dropout(x) # drop some video embeddings entirely
@@ -99,8 +110,7 @@ class CustomTransformer(nn.Module):
         Returns:
             torch.Tensor: Output logits or regression values.
         """
-        x = torch.vstack([k for k in x]) # combine the tensors for all the videos
-        x = x.unsqueeze(0)
+        x = self._stack_embeddings(x).unsqueeze(0)
         # y = x.squeeze()
         
         x = self.clip_dropout(x) # drop some video embeddings entirely
@@ -118,6 +128,70 @@ class CustomTransformer(nn.Module):
         linear_out = self.ff(out)
 
         return linear_out
+
+
+class EchoFocusEndToEnd(nn.Module):
+    """End-to-end model that composes PanEcho with the custom transformer."""
+
+    def __init__(
+        self,
+        input_size=768,
+        encoder_dim=768,
+        n_encoder_layers=0,
+        output_size=1,
+        clip_dropout=0,
+        tf_combine="avg",
+        panecho_trainable=True,
+    ):
+        """Initialize the end-to-end model.
+
+        Args:
+            input_size (int): PanEcho embedding dimension.
+            encoder_dim (int): Feed-forward dimension in the encoder.
+            n_encoder_layers (int): Number of transformer encoder layers.
+            output_size (int): Number of output targets.
+            clip_dropout (float): Dropout probability for clip embeddings.
+            tf_combine (str): Pooling method.
+            panecho_trainable (bool): Whether PanEcho backbone is trainable.
+        """
+        super().__init__()
+        self.panecho = PanEchoBackbone(backbone_only=True, trainable=panecho_trainable)
+        self.transformer = CustomTransformer(
+            input_size=input_size,
+            encoder_dim=encoder_dim,
+            n_encoder_layers=n_encoder_layers,
+            output_size=output_size,
+            clip_dropout=clip_dropout,
+            tf_combine=tf_combine,
+        )
+
+    def _panecho_embed(self, clips):
+        """Embed all clips with PanEcho.
+
+        Args:
+            clips (torch.Tensor): (n_videos, n_clips, 3, 16, 224, 224)
+
+        Returns:
+            torch.Tensor: (n_videos, n_clips, 768)
+        """
+        if clips.ndim != 6:
+            raise ValueError(f"Unexpected clips shape: {tuple(clips.shape)}")
+
+        embeddings = []
+        for video_clips in clips:
+            video_emb = self.panecho(video_clips)
+            embeddings.append(video_emb)
+        return torch.stack(embeddings, dim=0)
+
+    def forward(self, clips):
+        """Compute outputs from raw clips."""
+        embeddings = self._panecho_embed(clips)
+        return self.transformer(embeddings)
+
+    def embed(self, clips):
+        """Return pooled representation from raw clips."""
+        embeddings = self._panecho_embed(clips)
+        return self.transformer.embed(embeddings)
         
 class CustomQueryTransformer(nn.Module):
     """Transformer with a learned query token for set pooling."""

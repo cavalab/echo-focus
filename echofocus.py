@@ -28,8 +28,9 @@ from tqdm import tqdm
 import uuid
 
 import utils
-from datasets import CustomDataset, get_dataset, custom_collate
-from models import CustomTransformer
+from datasets import CustomDataset, get_dataset, get_video_dataset, custom_collate
+from models import CustomTransformer, EchoFocusEndToEnd
+from video_processing import Train_Transforms, Test_Transforms
 
 
 class EchoFocus:
@@ -58,7 +59,17 @@ class EchoFocus:
         preload_embeddings=False,
         run_id=None,
         config='config.json',
-        cache_embeddings=False
+        cache_embeddings=False,
+        end_to_end=True,
+        panecho_trainable=True,
+        num_clips=16,
+        clip_len=16,
+        use_hdf5_index=False,
+        video_base_path="/lab-share/Cardio-Mayourian-e2/Public/Echo_Pulled",
+        video_subdir_format="{echo_id}_trim",
+        smoke_train=False,
+        smoke_num_samples=8,
+        smoke_num_steps=2,
     ):
         """Initialize training/evaluation state and load config.
 
@@ -84,6 +95,16 @@ class EchoFocus:
             run_id (str|None): Optional run ID for reproducibility.
             config (str): Path to config JSON file.
             cache_embeddings (bool): Cache embeddings in memory.
+            end_to_end (bool): If True, train end-to-end with PanEcho backbone.
+            panecho_trainable (bool): If True, fine-tune the PanEcho backbone.
+            num_clips (int): Number of clips sampled per video.
+            clip_len (int): Frames per clip.
+            use_hdf5_index (bool): Use embedding HDF5s to locate video paths.
+            video_base_path (str): Base path for raw study folders.
+            video_subdir_format (str): Format for study folder under base path.
+            smoke_train (bool): If True, run a minimal smoke-training pass.
+            smoke_num_samples (int): Number of samples for smoke training.
+            smoke_num_steps (int): Number of batches per epoch for smoke training.
         """
         self.time = time.time()
         self.datetime = str(datetime.now()).replace(" ", "_")
@@ -171,7 +192,7 @@ class EchoFocus:
             print("payload:", json.dumps(payload, indent=2))
             json.dump(payload, of, indent=4)
 
-    def _setup_data(self, input_norm_dict=None):
+    def _setup_data(self, input_norm_dict=None, use_train_transforms=True):
         """Prepare dataloaders and normalization metadata.
 
         Args:
@@ -182,7 +203,22 @@ class EchoFocus:
         """
         csv_data = pd.read_csv(self.label_path) # pull labels from local path
         csv_data = csv_data.drop_duplicates() # I don't know why there are duplicates, but there are...
-        Embedding_EchoID_List = [int(k.split('_')[0]) for k in os.listdir(self.embedding_path)]
+        if self.end_to_end and not self.use_hdf5_index:
+            candidate_eids = csv_data["eid"].astype(int).unique()
+            Embedding_EchoID_List = [
+                eid
+                for eid in candidate_eids
+                if os.path.isdir(
+                    os.path.join(
+                        self.video_base_path,
+                        self.video_subdir_format.format(echo_id=int(eid)),
+                    )
+                )
+            ]
+        else:
+            Embedding_EchoID_List = [
+                int(k.split("_")[0]) for k in os.listdir(self.embedding_path)
+            ]
 
         print('Num echos in embedding folder:',len(Embedding_EchoID_List))
         # 3.2 limit label df rows to those
@@ -200,20 +236,22 @@ class EchoFocus:
         eid_keep_list =  tmp['eid'].values
         
         # study_embeddings, study_filenames = get_dataset(embedding_path, eid_keep_list, limit=sample_limit, parallel_processes=parallel_processes)
-        study_embeddings = get_dataset(
-            self.embedding_path,
-            eid_keep_list,
-            limit=self.sample_limit,
-            parallel_processes=self.parallel_processes,
-            # preload=self.preload_embeddings,
-            cache_embeddings=self.cache_embeddings,
-            batch_size=self.batch_size
-        )
+        study_embeddings = None
+        if not self.end_to_end:
+            study_embeddings = get_dataset(
+                self.embedding_path,
+                eid_keep_list,
+                limit=self.sample_limit,
+                parallel_processes=self.parallel_processes,
+                # preload=self.preload_embeddings,
+                cache_embeddings=self.cache_embeddings,
+                batch_size=self.batch_size
+            )
         # print('Total videos included: ',sum([study_embeddings[key].shape[0] for key in study_embeddings.keys()]))
         # so study_embeddings is a dict of M x 16 x 768, indexed by echo ID (EID)
         
         #because of laptop_debug we don't always keep all the eids. limit the dataframe to what we pulled
-        if self.preload_embeddings:
+        if self.preload_embeddings and not self.end_to_end:
             mask = tmp['eid'].isin(study_embeddings.keys())
             tmp = tmp[mask]
         eid_keep_list =  tmp['eid'].values
@@ -281,7 +319,21 @@ class EchoFocus:
             Test_DF = utils.normalize_df(Test_DF,input_norm_dict)
             print('normalized labels')
 
-        test_dataset = CustomDataset(Test_DF, study_embeddings, self.task_labels) #, study_filenames)
+        if self.end_to_end:
+            test_embeddings = get_video_dataset(
+                self.embedding_path,
+                Test_DF.index.values,
+                transforms=Test_Transforms,
+                cache_clips=self.cache_embeddings,
+                num_clips=self.num_clips,
+                clip_len=self.clip_len,
+                base_path=self.video_base_path,
+                use_hdf5_index=self.use_hdf5_index,
+                video_subdir_format=self.video_subdir_format,
+            )
+            test_dataset = CustomDataset(Test_DF, test_embeddings, self.task_labels)
+        else:
+            test_dataset = CustomDataset(Test_DF, study_embeddings, self.task_labels) #, study_filenames)
         if self.sample_limit < len(test_dataset):
             print('subsampling test dataset')
             test_dataset = torch.utils.data.Subset(test_dataset, list(range(0, self.sample_limit)))
@@ -297,7 +349,22 @@ class EchoFocus:
             return None, None, test_dataloader, input_norm_dict
         else:
             # weights = np.ones(len(Train_DF))
-            train_dataset = CustomDataset(Train_DF, study_embeddings, self.task_labels)  # , study_filenames)
+            if self.end_to_end:
+                train_transform = Train_Transforms if use_train_transforms else Test_Transforms
+                train_embeddings = get_video_dataset(
+                    self.embedding_path,
+                    Train_DF.index.values,
+                    transforms=train_transform,
+                    cache_clips=self.cache_embeddings,
+                    num_clips=self.num_clips,
+                    clip_len=self.clip_len,
+                    base_path=self.video_base_path,
+                    use_hdf5_index=self.use_hdf5_index,
+                    video_subdir_format=self.video_subdir_format,
+                )
+                train_dataset = CustomDataset(Train_DF, train_embeddings, self.task_labels)
+            else:
+                train_dataset = CustomDataset(Train_DF, study_embeddings, self.task_labels)  # , study_filenames)
             if self.sample_limit < len(train_dataset):
                 print('subsampling train dataset')
                 train_dataset = torch.utils.data.Subset(train_dataset, list(range(0, self.sample_limit)))
@@ -311,7 +378,21 @@ class EchoFocus:
                 # num_workers=self.parallel_processes
             )
             
-            valid_dataset = CustomDataset(Valid_DF, study_embeddings, self.task_labels) #, study_filenames)
+            if self.end_to_end:
+                valid_embeddings = get_video_dataset(
+                    self.embedding_path,
+                    Valid_DF.index.values,
+                    transforms=Test_Transforms,
+                    cache_clips=self.cache_embeddings,
+                    num_clips=self.num_clips,
+                    clip_len=self.clip_len,
+                    base_path=self.video_base_path,
+                    use_hdf5_index=self.use_hdf5_index,
+                    video_subdir_format=self.video_subdir_format,
+                )
+                valid_dataset = CustomDataset(Valid_DF, valid_embeddings, self.task_labels)
+            else:
+                valid_dataset = CustomDataset(Valid_DF, study_embeddings, self.task_labels) #, study_filenames)
             if self.sample_limit < len(valid_dataset):
                 print('subsampling valid dataset')
                 valid_dataset = torch.utils.data.Subset(valid_dataset, list(range(0, self.sample_limit)))
@@ -359,14 +440,25 @@ class EchoFocus:
                     setattr(self,k,train_args[k])
 
         # 6. Pull model if it already exists
-        self.model = CustomTransformer(
-            input_size=768,
-            encoder_dim=768,
-            n_encoder_layers=self.encoder_depth,
-            output_size=len(self.task_labels),
-            clip_dropout=self.clip_dropout,
-            tf_combine="avg",
-        )
+        if self.end_to_end:
+            self.model = EchoFocusEndToEnd(
+                input_size=768,
+                encoder_dim=768,
+                n_encoder_layers=self.encoder_depth,
+                output_size=len(self.task_labels),
+                clip_dropout=self.clip_dropout,
+                tf_combine="avg",
+                panecho_trainable=self.panecho_trainable,
+            )
+        else:
+            self.model = CustomTransformer(
+                input_size=768,
+                encoder_dim=768,
+                n_encoder_layers=self.encoder_depth,
+                output_size=len(self.task_labels),
+                clip_dropout=self.clip_dropout,
+                tf_combine="avg",
+            )
     
         if (torch.cuda.is_available()):
             self.model = self.model.to('cuda')
@@ -413,8 +505,24 @@ class EchoFocus:
         Args:
             split (tuple[int, int, int]): Train/val/test percent split.
         """
+        smoke_steps = None
+        if self.smoke_train:
+            if self.epoch_lim < 1:
+                self.epoch_lim = 1
+            else:
+                self.epoch_lim = min(self.epoch_lim, 1)
+            self.epoch_early_stop = 1
+            self.sample_limit = min(self.sample_limit, self.smoke_num_samples)
+            smoke_steps = self.smoke_num_steps
+            print(
+                "smoke_train enabled:",
+                f"samples={self.sample_limit}, steps={smoke_steps}, epochs={self.epoch_lim}",
+            )
         model, current_epoch, best_epoch, best_loss, input_norm_dict = self._setup_model()
-        train_dataloader, val_dataloader, test_dataloader, input_norm_dict = self._setup_data(input_norm_dict)        
+        train_dataloader, val_dataloader, test_dataloader, input_norm_dict = self._setup_data(
+            input_norm_dict,
+            use_train_transforms=True,
+        )
         
         # 9. Train
         # Training loop
@@ -455,6 +563,12 @@ class EchoFocus:
                     self.optimizer.step()
                     self.model.zero_grad()
                     # print('DEBUG: model updated at end of epoch without reaching batch_num', (batch_count+1), len(train_dataloader))
+
+                if smoke_steps is not None and (batch_count + 1) >= smoke_steps:
+                    if (batch_count + 1) % self.batch_number != 0:
+                        self.optimizer.step()
+                        self.model.zero_grad()
+                    break
                     
             epoch_end_time = time.time()
             
@@ -571,7 +685,10 @@ class EchoFocus:
         model,_,_,_,_ = self._setup_model() 
         best_checkpoint_path = os.path.join(self.model_path, 'best_checkpoint.pt') 
         best_model,_,_,_,input_norm_dict  = load_model_and_random_state(best_checkpoint_path, model)
-        train_dl,val_dl,test_dl,input_norm_dict = self._setup_data(input_norm_dict)
+        train_dl,val_dl,test_dl,input_norm_dict = self._setup_data(
+            input_norm_dict,
+            use_train_transforms=False,
+        )
 
         for fold,dataloader in zip((train_dl,val_dl,test_dl),('train','val','test')):
             self._evaluate(model, dataloader, fold, input_norm_dict)
@@ -595,7 +712,10 @@ class EchoFocus:
         model,_,_,_,_ = self._setup_model() 
         best_checkpoint_path = os.path.join(self.model_path, 'best_checkpoint.pt') 
         best_model,_,_,_,input_norm_dict  = load_model_and_random_state(best_checkpoint_path, model)
-        _,_,dataloader,input_norm_dict = self._setup_data(input_norm_dict)
+        _,_,dataloader,input_norm_dict = self._setup_data(
+            input_norm_dict,
+            use_train_transforms=False,
+        )
         
         if embed_file is None:
             embed_file = os.path.join(self.model_path,f'embeddings_{self.dataset}_{self.task}.h5')
@@ -640,7 +760,10 @@ class EchoFocus:
         model,_,_,_,_ = self._setup_model() 
         best_checkpoint_path = os.path.join(self.model_path, 'best_checkpoint.pt') 
         best_model,_,_,_,input_norm_dict  = load_model_and_random_state(best_checkpoint_path, model)
-        _,_,test_dataloader,input_norm_dict = self._setup_data(input_norm_dict)
+        _,_,test_dataloader,input_norm_dict = self._setup_data(
+            input_norm_dict,
+            use_train_transforms=False,
+        )
         
         # Run on test dataset
         print('run model on test set')
