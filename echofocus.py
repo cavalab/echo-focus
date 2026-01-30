@@ -463,6 +463,7 @@ class EchoFocus:
                 clip_dropout=self.clip_dropout,
                 tf_combine="avg",
                 panecho_trainable=self.panecho_trainable,
+                debug_mem=self.debug_mem,
             )
         else:
             self.model = CustomTransformer(
