@@ -471,6 +471,13 @@ class EchoFocus:
                 clip_dropout=self.clip_dropout,
                 tf_combine="avg",
             )
+        total_params = sum(p.numel() for p in self.model.parameters())
+        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        print(
+            "model parameters:",
+            f"total={total_params:,}",
+            f"trainable={trainable_params:,}",
+        )
     
         if (torch.cuda.is_available()):
             self.model = self.model.to('cuda')
