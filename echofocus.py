@@ -65,7 +65,7 @@ class EchoFocus:
         num_clips=16,
         clip_len=16,
         use_hdf5_index=False,
-        video_base_path="/lab-share/Cardio-Mayourian-e2/Public/Echo_Pulled",
+        video_base_path=None,
         video_subdir_format="{echo_id}_trim",
         smoke_train=False,
         smoke_num_samples=8,
@@ -554,7 +554,7 @@ class EchoFocus:
             use_train_transforms=True,
         )
         
-        # 9. Train
+        ########################################
         # Training loop
         print('begin training loop')
         def _mem(tag):
