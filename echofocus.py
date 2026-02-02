@@ -46,7 +46,7 @@ class EchoFocus:
         seed=0,
         batch_number=128, # number of batches processed before updating
         batch_size=1,
-        epoch_lim=-1,
+        total_epochs=-1,
         epoch_early_stop=9999,
         learning_rate=0.0001,  # default to 1e-4
         encoder_depth=0,
@@ -67,6 +67,8 @@ class EchoFocus:
         num_clips=16,
         clip_len=16,
         use_hdf5_index=False,
+        label_path=None,
+        embedding_path=None,
         video_base_path="/lab-share/Cardio-Mayourian-e2/Public/Echo_Pulled",
         video_subdir_format="{echo_id}_trim",
         smoke_train=False,
@@ -85,7 +87,7 @@ class EchoFocus:
             seed (int): RNG seed for reproducibility.
             batch_number (int): Gradient accumulation steps.
             batch_size (int): Batch size (only 1 supported).
-            epoch_lim (int): Max epochs to train; -1 for eval-only.
+            total_epochs (int): Max epochs to train; -1 for eval-only.
             epoch_early_stop (int): Early stopping patience in epochs.
             learning_rate (float): Optimizer learning rate.
             encoder_depth (int): Number of transformer encoder layers.
@@ -131,9 +133,9 @@ class EchoFocus:
         print("random seed", seed, "\n")
         print("batch_number", batch_number, "\n")
 
-        if epoch_lim == -1:
+        if total_epochs == -1:
             print("epoch lim missing. evaluating model")
-        print("epoch_lim", epoch_lim, "\n")
+        print("total_epochs", total_epochs, "\n")
 
         if epoch_early_stop == 9999:
             print("no early stop. defaulting to 10k epochs")
@@ -751,16 +753,16 @@ class EchoFocus:
         """
         smoke_steps = None
         if self.smoke_train:
-            if self.epoch_lim < 1:
-                self.epoch_lim = 1
+            if self.total_epochs < 1:
+                self.total_epochs = 1
             else:
-                self.epoch_lim = min(self.epoch_lim, 1)
+                self.total_epochs = min(self.total_epochs, 1)
             self.epoch_early_stop = 1
             self.sample_limit = min(self.sample_limit, self.smoke_num_samples)
             smoke_steps = self.smoke_num_steps
             print(
                 "smoke_train enabled:",
-                f"samples={self.sample_limit}, steps={smoke_steps}, epochs={self.epoch_lim}",
+                f"samples={self.sample_limit}, steps={smoke_steps}, epochs={self.total_epochs}",
             )
         model, current_epoch, best_epoch, best_loss, input_norm_dict = self._setup_model()
         train_dataloader, val_dataloader, test_dataloader, input_norm_dict = self._setup_data(
@@ -804,7 +806,7 @@ class EchoFocus:
             max_alloc = torch.cuda.max_memory_allocated() / 1024**3
             print(f"[mem] {tag}: alloc={alloc:.2f}G reserved={reserved:.2f}G max={max_alloc:.2f}G")
 
-        while (current_epoch < self.epoch_lim) and (
+        while (current_epoch < self.total_epochs) and (
             current_epoch - best_epoch < self.epoch_early_stop
         ):
             if epoch_hook is not None:
@@ -913,7 +915,7 @@ class EchoFocus:
                 best_loss = val_loss_total 
                 best_epoch = current_epoch
 
-            if (current_epoch == self.epoch_lim): 
+            if (current_epoch == self.total_epochs): 
                 print('current epoch = epoch limit, terminating')
             if current_epoch - best_epoch == self.epoch_early_stop:
                 print('early stopping')
@@ -926,6 +928,7 @@ class EchoFocus:
         for dataloader,fold in zip((train_dataloader,val_dataloader,test_dataloader),('train','val','test')):
             self._evaluate(best_model, dataloader, fold, input_norm_dict)
 
+    @utils.initializer
     def train_ping_pong(
         self,
         total_epochs=10,
@@ -959,7 +962,7 @@ class EchoFocus:
                 f"samples={self.sample_limit}, steps={smoke_steps}, epochs={total_epochs}",
             )
 
-        self.epoch_lim = int(total_epochs)
+        self.total_epochs = int(total_epochs)
         model, current_epoch, best_epoch, best_loss, input_norm_dict = self._setup_model()
         train_dataloader, val_dataloader, test_dataloader, input_norm_dict = self._setup_data(
             input_norm_dict,
