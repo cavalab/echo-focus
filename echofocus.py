@@ -461,14 +461,14 @@ class EchoFocus:
                     Valid_DF.index.values,
                     transforms=Test_Transforms,
                     cache_clips=self.cache_embeddings,
-                num_clips=self.num_clips,
-                clip_len=self.clip_len,
-                base_path=self.video_base_path,
-                use_hdf5_index=self.use_hdf5_index,
-                video_subdir_format=self.video_subdir_format,
-                max_videos_per_study=self.max_videos_per_study,
-            )
-            valid_dataset = CustomDataset(Valid_DF, valid_embeddings, self.task_labels)
+                    num_clips=self.num_clips,
+                    clip_len=self.clip_len,
+                    base_path=self.video_base_path,
+                    use_hdf5_index=self.use_hdf5_index,
+                    video_subdir_format=self.video_subdir_format,
+                    max_videos_per_study=self.max_videos_per_study,
+                )
+                valid_dataset = CustomDataset(Valid_DF, valid_embeddings, self.task_labels)
             else:
                 valid_dataset = CustomDataset(Valid_DF, study_embeddings, self.task_labels) #, study_filenames)
             if self.sample_limit < len(valid_dataset):
