@@ -19,6 +19,7 @@ import sys
 import torch.profiler
 import threading
 import subprocess
+import os
 
 # import cv2
 import numpy as np
@@ -87,6 +88,8 @@ class EchoFocus:
         profile_summary=False,
         gpu_monitor=False,
         gpu_monitor_interval=10,
+        ram_monitor=False,
+        ram_monitor_interval=10,
     ):
         """Initialize training/evaluation state and load config.
 
@@ -132,6 +135,8 @@ class EchoFocus:
             profile_summary (bool): If True, print a summary table after profiling.
             gpu_monitor (bool): If True, log GPU utilization periodically.
             gpu_monitor_interval (int): Seconds between GPU utilization logs.
+            ram_monitor (bool): If True, log process RAM usage periodically.
+            ram_monitor_interval (int): Seconds between RAM usage logs.
         """
         self.time = time.time()
         self.datetime = str(datetime.now()).replace(" ", "_")
@@ -223,6 +228,38 @@ class EchoFocus:
                 except Exception:
                     pass
                 stop_event.wait(self.gpu_monitor_interval)
+
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+        return thread, stop_event
+
+    def _start_ram_monitor(self):
+        if not self.ram_monitor:
+            return None, None
+        stop_event = threading.Event()
+
+        def _read_rss_mb():
+            try:
+                import psutil
+                proc = psutil.Process(os.getpid())
+                return proc.memory_info().rss / (1024 ** 2)
+            except Exception:
+                try:
+                    with open(f"/proc/{os.getpid()}/statm", "r") as f:
+                        parts = f.read().strip().split()
+                    if len(parts) >= 2:
+                        rss_pages = int(parts[1])
+                        return rss_pages * (os.sysconf("SC_PAGE_SIZE") / (1024 ** 2))
+                except Exception:
+                    return None
+            return None
+
+        def _worker():
+            while not stop_event.is_set():
+                rss_mb = _read_rss_mb()
+                if rss_mb is not None:
+                    self._ram_status = f"{rss_mb/1024:.2f}GB"
+                stop_event.wait(self.ram_monitor_interval)
 
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
@@ -859,6 +896,11 @@ class EchoFocus:
         if self.gpu_monitor:
             self._gpu_status = ""
             monitor_thread, monitor_stop = self._start_gpu_monitor()
+        ram_thread = None
+        ram_stop = None
+        if self.ram_monitor:
+            self._ram_status = ""
+            ram_thread, ram_stop = self._start_ram_monitor()
         prof = None
         prof_records = []
         profile_steps = int(self.profile_steps) if self.profile_steps is not None else 0
@@ -907,8 +949,13 @@ class EchoFocus:
                 total=len(train_dataloader),
             )
             for batch_count, (Embedding, Correct_Out, EID) in enumerate(pbar):
+                postfix = []
                 if self.gpu_monitor and self._gpu_status:
-                    pbar.set_postfix_str(f"gpu={self._gpu_status}")
+                    postfix.append(f"gpu={self._gpu_status}")
+                if self.ram_monitor and self._ram_status:
+                    postfix.append(f"ram={self._ram_status}")
+                if postfix:
+                    pbar.set_postfix_str(" ".join(postfix))
                 batch_start = time.time()
                 data_wait = None
                 if prev_batch_end is not None:
@@ -1085,6 +1132,10 @@ class EchoFocus:
             monitor_stop.set()
         if monitor_thread is not None:
             monitor_thread.join(timeout=1.0)
+        if ram_stop is not None:
+            ram_stop.set()
+        if ram_thread is not None:
+            ram_thread.join(timeout=1.0)
 
         utils.plot_training_progress( self.model_path, self.perf_log)
         print('Training Completed')
