@@ -82,6 +82,7 @@ class EchoFocus:
         profile_steps=20,
         profile_dir="profiles",
         timing_every=10,
+        profile_summary=False,
     ):
         """Initialize training/evaluation state and load config.
 
@@ -124,6 +125,7 @@ class EchoFocus:
             profile_steps (int): Number of steps to profile.
             profile_dir (str): Output directory for profiler traces.
             timing_every (int): Print timing stats every N batches.
+            profile_summary (bool): If True, print a summary table after profiling.
         """
         self.time = time.time()
         self.datetime = str(datetime.now()).replace(" ", "_")
@@ -418,7 +420,7 @@ class EchoFocus:
             batch_size=self.batch_size,
             shuffle=False,
             collate_fn=custom_collate,
-            # num_workers=self.parallel_processes
+            num_workers=self.parallel_processes,
         )
 
         if (Tr == 0):
@@ -452,7 +454,7 @@ class EchoFocus:
                 # sampler=torch.utils.data.WeightedRandomSampler(
                 #     weights, len(weights), replacement=True
                 # ),
-                # num_workers=self.parallel_processes
+                num_workers=self.parallel_processes,
             )
             
             if self.end_to_end:
@@ -479,7 +481,7 @@ class EchoFocus:
                 batch_size=self.batch_size,
                 shuffle=False,
                 collate_fn=custom_collate,
-                # num_workers=self.parallel_processes
+                num_workers=self.parallel_processes,
             )
         
 
@@ -810,6 +812,7 @@ class EchoFocus:
         """Run the main training loop with an optional per-epoch hook."""
         print('begin training loop')
         prof = None
+        prof_records = []
         profile_steps = int(self.profile_steps) if self.profile_steps is not None else 0
         profile_steps = max(0, profile_steps)
         if self.profile and profile_steps > 0:
@@ -943,6 +946,8 @@ class EchoFocus:
                 if prof is not None and global_step < profile_steps:
                     prof.step()
                 if prof is not None and global_step == profile_steps:
+                    if self.profile_summary:
+                        prof_records.append(prof)
                     prof.stop()
                     prof = None
                 
@@ -1009,8 +1014,21 @@ class EchoFocus:
                 print('early stopping')
             
         if prof is not None:
+            if self.profile_summary:
+                prof_records.append(prof)
             prof.stop()
             prof = None
+
+        if self.profile_summary and prof_records:
+            try:
+                summary = prof_records[-1].key_averages().table(
+                    sort_by="cuda_time_total" if torch.cuda.is_available() else "cpu_time_total",
+                    row_limit=50,
+                )
+                print("Profiler summary (top ops):")
+                print(summary)
+            except Exception as e:
+                print(f"warning: failed to print profiler summary: {e}")
 
         utils.plot_training_progress( self.model_path, self.perf_log)
         print('Training Completed')
