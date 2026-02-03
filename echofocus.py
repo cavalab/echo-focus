@@ -20,6 +20,7 @@ import torch.profiler
 import threading
 import subprocess
 import os
+import torch.multiprocessing as mp
 
 # import cv2
 import numpy as np
@@ -144,6 +145,8 @@ class EchoFocus:
             self.run_id = run_id
         else:
             self.run_id = f"{self.datetime}_{uuid.uuid4()}"
+
+        mp.set_sharing_strategy("file_system")
 
         assert batch_size==1, "only batch_size=1 currently supported"
         print('main')
