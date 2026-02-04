@@ -146,6 +146,11 @@ class EchoFocus:
         else:
             self.run_id = f"{self.datetime}_{uuid.uuid4()}"
 
+        if "TORCH_SHM_DIR" not in os.environ:
+            tmp_base = os.environ.get("TMPDIR") or os.environ.get("TMP") or os.environ.get("TEMP")
+            if tmp_base:
+                os.environ["TORCH_SHM_DIR"] = os.path.join(tmp_base, "torch-shm")
+
         mp.set_sharing_strategy("file_system")
 
         assert batch_size==1, "only batch_size=1 currently supported"
