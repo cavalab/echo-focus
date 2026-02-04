@@ -85,7 +85,7 @@ class EchoFocus:
         profile=False,
         profile_steps=20,
         profile_dir="profiles",
-        timing_every=10,
+        timing_every=None,
         profile_summary=False,
         gpu_monitor=False,
         gpu_monitor_interval=10,
