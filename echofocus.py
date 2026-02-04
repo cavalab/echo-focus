@@ -159,6 +159,19 @@ class EchoFocus:
             print(f"WARNING: unknown sharing_strategy={self.sharing_strategy}; using file_descriptor")
             mp.set_sharing_strategy("file_descriptor")
 
+        try:
+            shm_stats = subprocess.check_output(["df", "-h", "/dev/shm"], text=True).strip().splitlines()
+            shm_line = shm_stats[-1] if shm_stats else ""
+        except Exception:
+            shm_line = "unavailable"
+        print(
+            "preflight:",
+            f"sharing_strategy={mp.get_sharing_strategy()}",
+            f"TORCH_SHM_DIR={os.environ.get('TORCH_SHM_DIR', '')}",
+            f"TMPDIR={os.environ.get('TMPDIR', '')}",
+            f"/dev/shm={shm_line}",
+        )
+
         assert batch_size==1, "only batch_size=1 currently supported"
         print('main')
         args = {**locals()}
