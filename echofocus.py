@@ -91,6 +91,7 @@ class EchoFocus:
         gpu_monitor_interval=10,
         ram_monitor=False,
         ram_monitor_interval=10,
+        sharing_strategy="file_descriptor",
     ):
         """Initialize training/evaluation state and load config.
 
@@ -138,6 +139,7 @@ class EchoFocus:
             gpu_monitor_interval (int): Seconds between GPU utilization logs.
             ram_monitor (bool): If True, log process RAM usage periodically.
             ram_monitor_interval (int): Seconds between RAM usage logs.
+            sharing_strategy (str): torch.multiprocessing sharing strategy ("file_descriptor" or "file_system").
         """
         self.time = time.time()
         self.datetime = str(datetime.now()).replace(" ", "_")
@@ -151,7 +153,11 @@ class EchoFocus:
             if tmp_base:
                 os.environ["TORCH_SHM_DIR"] = os.path.join(tmp_base, "torch-shm")
 
-        mp.set_sharing_strategy("file_system")
+        if self.sharing_strategy in ("file_descriptor", "file_system"):
+            mp.set_sharing_strategy(self.sharing_strategy)
+        else:
+            print(f"WARNING: unknown sharing_strategy={self.sharing_strategy}; using file_descriptor")
+            mp.set_sharing_strategy("file_descriptor")
 
         assert batch_size==1, "only batch_size=1 currently supported"
         print('main')
