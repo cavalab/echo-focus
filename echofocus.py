@@ -77,6 +77,7 @@ class EchoFocus:
         video_base_path="/lab-share/Cardio-Mayourian-e2/Public/Echo_Pulled",
         video_subdir_format="{echo_id}_trim",
         max_videos_per_study=None,
+        max_cache_gb=250,
         smoke_train=False,
         smoke_num_steps=2,
         debug_mem=False,
@@ -125,6 +126,7 @@ class EchoFocus:
             video_base_path (str): Base path for raw study folders.
             video_subdir_format (str): Format for study folder under base path.
             max_videos_per_study (int|None): Optional cap on videos per study.
+            max_cache_gb (float|None): Optional RAM cache cap in GB.
             smoke_train (bool): If True, run a minimal smoke-training pass.
             smoke_num_steps (int): Number of batches per epoch for smoke training.
             debug_mem (bool): If True, print CUDA memory stats for first batch each epoch.
@@ -425,6 +427,7 @@ class EchoFocus:
                 limit=self.sample_limit,
                 parallel_processes=self.parallel_processes,
                 cache_embeddings=self.cache_embeddings,
+                max_cache_gb=self.max_cache_gb,
                 batch_size=self.batch_size
             )
         # print('Total videos included: ',sum([study_embeddings[key].shape[0] for key in study_embeddings.keys()]))
@@ -509,6 +512,7 @@ class EchoFocus:
                 use_hdf5_index=self.use_hdf5_index,
                 video_subdir_format=self.video_subdir_format,
                 max_videos_per_study=self.max_videos_per_study,
+                max_cache_gb=self.max_cache_gb,
             )
             test_dataset = CustomDataset(Test_DF, test_embeddings, self.task_labels)
         else:
@@ -537,14 +541,15 @@ class EchoFocus:
                     self.embedding_path,
                     Train_DF.index.values,
                     transforms=train_transform,
-                    cache_clips=self.cache_embeddings,
-                    num_clips=self.num_clips,
-                    clip_len=self.clip_len,
-                    base_path=self.video_base_path,
-                    use_hdf5_index=self.use_hdf5_index,
-                    video_subdir_format=self.video_subdir_format,
-                    max_videos_per_study=self.max_videos_per_study,
-                )
+                cache_clips=self.cache_embeddings,
+                num_clips=self.num_clips,
+                clip_len=self.clip_len,
+                base_path=self.video_base_path,
+                use_hdf5_index=self.use_hdf5_index,
+                video_subdir_format=self.video_subdir_format,
+                max_videos_per_study=self.max_videos_per_study,
+                max_cache_gb=self.max_cache_gb,
+            )
                 train_dataset = CustomDataset(Train_DF, train_embeddings, self.task_labels)
             else:
                 train_dataset = CustomDataset(Train_DF, study_embeddings, self.task_labels)  # , study_filenames)
@@ -569,14 +574,15 @@ class EchoFocus:
                     self.embedding_path,
                     Valid_DF.index.values,
                     transforms=Test_Transforms,
-                    cache_clips=self.cache_embeddings,
-                    num_clips=self.num_clips,
-                    clip_len=self.clip_len,
-                    base_path=self.video_base_path,
-                    use_hdf5_index=self.use_hdf5_index,
-                    video_subdir_format=self.video_subdir_format,
-                    max_videos_per_study=self.max_videos_per_study,
-                )
+                cache_clips=self.cache_embeddings,
+                num_clips=self.num_clips,
+                clip_len=self.clip_len,
+                base_path=self.video_base_path,
+                use_hdf5_index=self.use_hdf5_index,
+                video_subdir_format=self.video_subdir_format,
+                max_videos_per_study=self.max_videos_per_study,
+                max_cache_gb=self.max_cache_gb,
+            )
                 valid_dataset = CustomDataset(Valid_DF, valid_embeddings, self.task_labels)
             else:
                 valid_dataset = CustomDataset(Valid_DF, study_embeddings, self.task_labels) #, study_filenames)
@@ -1140,6 +1146,7 @@ class EchoFocus:
                 print('current epoch = epoch limit, terminating')
             if current_epoch - best_epoch == self.epoch_early_stop:
                 print('early stopping')
+
             
         if prof is not None:
             if self.profile_summary:

@@ -5,6 +5,7 @@ import torch
 import h5py
 import os
 import numpy as np
+from collections import OrderedDict
 from video_processing import pull_clips
 # %% data gathering
 class EmbeddingDataset(torch.utils.data.Dataset):
@@ -13,7 +14,8 @@ class EmbeddingDataset(torch.utils.data.Dataset):
     def __init__(self, embed_path, embedding_echo_id_list, 
         base_path = '/lab-share/Cardio-Mayourian-e2/Public/Echo_Pulled',
         store_keychain=False,
-        cache_embeddings=True
+        cache_embeddings=True,
+        max_cache_gb=None,
     ):
         """Create a dataset for loading precomputed clip embeddings.
 
@@ -23,6 +25,7 @@ class EmbeddingDataset(torch.utils.data.Dataset):
             base_path (str): Base path used when reconstructing filenames.
             store_keychain (bool): Cache intermediate HDF5 path keys.
             cache_embeddings (bool): Cache loaded embeddings in memory.
+            max_cache_gb (float|None): Optional RAM cache cap in GB.
         """
         self.embed_path = embed_path  # folder path
         self.embedding_echo_id_list = embedding_echo_id_list  # list of ints
@@ -30,7 +33,31 @@ class EmbeddingDataset(torch.utils.data.Dataset):
         self.keychain = []
         self.store_keychain = store_keychain
         self.cache_embeddings=cache_embeddings
-        self.video_cache={}
+        self.max_cache_bytes = None if max_cache_gb is None else int(max_cache_gb * (1024 ** 3))
+        self.video_cache = OrderedDict()
+        self.cache_bytes = 0
+
+    def _maybe_cache(self, echo_id, value):
+        if not self.cache_embeddings:
+            return
+        if self.max_cache_bytes is not None:
+            if torch.is_tensor(value):
+                size = value.numel() * value.element_size()
+            else:
+                size = value.nbytes
+            if size > self.max_cache_bytes:
+                return
+            while self.cache_bytes + size > self.max_cache_bytes and len(self.video_cache) > 0:
+                _, evicted = self.video_cache.popitem(last=False)
+                if torch.is_tensor(evicted):
+                    evicted_size = evicted.numel() * evicted.element_size()
+                else:
+                    evicted_size = evicted.nbytes
+                self.cache_bytes -= evicted_size
+            self.video_cache[echo_id] = value
+            self.cache_bytes += size
+        else:
+            self.video_cache[echo_id] = value
 
     def get_filenames(self, index):
         """Return filenames for an entry by dataset index.
@@ -145,7 +172,7 @@ class EmbeddingDataset(torch.utils.data.Dataset):
                 study_clips.append(clip)
             study_clips = np.array(study_clips)
         if self.cache_embeddings:
-            self.video_cache[echo_id] = study_clips
+            self._maybe_cache(echo_id, study_clips)
         return study_clips, echo_id
 
     def __len__(self):
@@ -215,6 +242,7 @@ class VideoClipDataset(torch.utils.data.Dataset):
         use_hdf5_index=False,
         video_subdir_format="{echo_id}_trim",
         max_videos_per_study=None,
+        max_cache_gb=None,
     ):
         """Create a dataset for loading raw video clips.
 
@@ -229,6 +257,7 @@ class VideoClipDataset(torch.utils.data.Dataset):
             use_hdf5_index (bool): Use embedding HDF5 files to locate video paths.
             video_subdir_format (str): Format for study folder under base_path.
             max_videos_per_study (int|None): Optional cap on videos per study.
+            max_cache_gb (float|None): Optional RAM cache cap in GB.
         """
         self.embed_path = embed_path
         self.embedding_echo_id_list = embedding_echo_id_list
@@ -242,7 +271,25 @@ class VideoClipDataset(torch.utils.data.Dataset):
         self.max_videos_per_study = max_videos_per_study
         self.keychain = []
         self.store_keychain = True
-        self.video_cache = {}
+        self.max_cache_bytes = None if max_cache_gb is None else int(max_cache_gb * (1024 ** 3))
+        self.video_cache = OrderedDict()
+        self.cache_bytes = 0
+
+    def _maybe_cache(self, echo_id, value):
+        if not self.cache_clips:
+            return
+        if self.max_cache_bytes is not None:
+            size = value.numel() * value.element_size()
+            if size > self.max_cache_bytes:
+                return
+            while self.cache_bytes + size > self.max_cache_bytes and len(self.video_cache) > 0:
+                _, evicted = self.video_cache.popitem(last=False)
+                evicted_size = evicted.numel() * evicted.element_size()
+                self.cache_bytes -= evicted_size
+            self.video_cache[echo_id] = value
+            self.cache_bytes += size
+        else:
+            self.video_cache[echo_id] = value
 
     def _filter_video_files(self, files):
         exts = {
@@ -329,7 +376,7 @@ class VideoClipDataset(torch.utils.data.Dataset):
         study_clips = torch.stack(study_clips, dim=0)
 
         if self.cache_clips:
-            self.video_cache[echo_id] = study_clips
+            self._maybe_cache(echo_id, study_clips)
         return study_clips, echo_id
 
     def __len__(self):
@@ -411,6 +458,7 @@ def get_dataset(
     parallel_processes=1,
     preload=False,
     cache_embeddings=False,
+    max_cache_gb=None,
     batch_size=1,
 ):
     """Create an embedding dataset or raise if preload is requested.
@@ -439,9 +487,12 @@ def get_dataset(
             embed_path, embedding_echo_id_list, cache_embeddings=cache_embeddings
         )
     else:
-        emb_ds = EmbeddingDataset(
-            embed_path, embedding_echo_id_list, cache_embeddings=cache_embeddings
-        )
+    emb_ds = EmbeddingDataset(
+        embed_path,
+        embedding_echo_id_list,
+        cache_embeddings=cache_embeddings,
+        max_cache_gb=max_cache_gb,
+    )
     # todo: pass n workers to embeddingdataset
     if not preload:
         return emb_ds
@@ -460,6 +511,7 @@ def get_video_dataset(
     use_hdf5_index=False,
     video_subdir_format="{echo_id}_trim",
     max_videos_per_study=None,
+    max_cache_gb=None,
 ):
     """Create a dataset that loads raw clips on demand."""
     return VideoClipDataset(
@@ -473,6 +525,7 @@ def get_video_dataset(
         use_hdf5_index=use_hdf5_index,
         video_subdir_format=video_subdir_format,
         max_videos_per_study=max_videos_per_study,
+        max_cache_gb=max_cache_gb,
     )
     # print('Starting Embedding Pull')
     # start = time.time()
