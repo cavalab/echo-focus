@@ -325,7 +325,7 @@ class EchoFocus:
     def _load_submodule_weights(self, module, path, prefix=None):
         if path is None:
             return
-        ckpt = torch.load(path, map_location="cpu")
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
         state = ckpt.get("model_state_dict", ckpt)
         if prefix:
             state = {k[len(prefix):]: v for k, v in state.items() if k.startswith(prefix)}
