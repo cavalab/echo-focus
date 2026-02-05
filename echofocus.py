@@ -523,7 +523,8 @@ class EchoFocus:
             collate_fn=custom_collate,
             num_workers=self.parallel_processes,
             pin_memory=True,
-            persistent_workers=bool(self.parallel_processes),
+            persistent_workers=False,
+            prefetch_factor=1 if self.parallel_processes else None,
         )
 
         if (Tr == 0):
@@ -559,7 +560,8 @@ class EchoFocus:
                 # ),
                 num_workers=self.parallel_processes,
                 pin_memory=True,
-                persistent_workers=bool(self.parallel_processes),
+                persistent_workers=False,
+                prefetch_factor=1 if self.parallel_processes else None,
             )
             
             if self.end_to_end:
@@ -588,7 +590,8 @@ class EchoFocus:
                 collate_fn=custom_collate,
                 num_workers=self.parallel_processes,
                 pin_memory=True,
-                persistent_workers=bool(self.parallel_processes),
+                persistent_workers=False,
+                prefetch_factor=1 if self.parallel_processes else None,
             )
         
 
