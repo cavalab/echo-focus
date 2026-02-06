@@ -19,7 +19,6 @@ import sys
 import torch.profiler
 import threading
 import subprocess
-import os
 import torch.multiprocessing as mp
 from collections import OrderedDict
 
@@ -52,7 +51,7 @@ class EchoFocus:
         seed=0,
         batch_number=128, # number of batches processed before updating
         batch_size=1,
-        total_epochs=-1,
+        total_epochs=10,
         epoch_early_stop=9999,
         learning_rate=0.0001,  # default to 1e-4
         encoder_depth=0,

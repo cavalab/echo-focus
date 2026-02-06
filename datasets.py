@@ -270,7 +270,7 @@ class VideoClipDataset(torch.utils.data.Dataset):
         self.video_subdir_format = video_subdir_format
         self.max_videos_per_study = max_videos_per_study
         self.keychain = []
-        self.store_keychain = True
+        self.store_keychain = False #WGL: set to False to prevent parallel worker issue
         self.max_cache_bytes = None if max_cache_gb is None else int(max_cache_gb * (1024 ** 3))
         self.video_cache = OrderedDict()
         self.cache_bytes = 0
