@@ -1502,8 +1502,15 @@ class EchoFocus:
 
             label_metrics = {'n_samples': int(y_true.shape[0])}
             if self.task in ['chd', 'fyler']:
+                if not np.all((y_true >= 0) & (y_true <= 1)):
+                    bad_vals = y_true[(y_true < 0) | (y_true > 1)]
+                    raise ValueError(
+                        f"Label {label} has classification targets outside [0,1]. "
+                        f"First bad values: {bad_vals[:10].tolist()}"
+                    )
+                y_true_cls = y_true.astype(int)
                 roc_val, roc_lo, roc_hi, roc_eff_n = self._bootstrap_metric_ci(
-                    y_true,
+                    y_true_cls,
                     y_pred,
                     roc_auc_score,
                     rng=rng,
@@ -1511,7 +1518,7 @@ class EchoFocus:
                     require_two_classes=True,
                 )
                 ap_val, ap_lo, ap_hi, ap_eff_n = self._bootstrap_metric_ci(
-                    y_true,
+                    y_true_cls,
                     y_pred,
                     average_precision_score,
                     rng=rng,
@@ -1530,7 +1537,7 @@ class EchoFocus:
                     'ci_upper': ap_hi,
                     'n_bootstrap_effective': ap_eff_n,
                 }
-                y_true_all.append(y_true)
+                y_true_all.append(y_true_cls)
                 y_pred_all.append(y_pred)
                 valid_labels.append(label)
             elif self.task == 'measure':
