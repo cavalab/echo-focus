@@ -1384,7 +1384,7 @@ class EchoFocus:
                 return model.transformer(emb)
             return model(embedding)
 
-        y_true, y_pred, EIDs, loss = run_model_on_dataloader(
+        y_pred, y_true, EIDs, loss = run_model_on_dataloader(
             model,
             dataloader,
             self.loss_fn,
